@@ -75,6 +75,121 @@ set(BufPlayBungee_schelp_files
     plugins/BufPlayBungee/BufPlayBungee.schelp
 )
 
+if(WIN32)
+    add_compile_definitions(_USE_MATH_DEFINES)
+    
+    # Create compatibility header BEFORE adding Bungee
+    set(BUNGEE_COMPAT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/bungee/windows_compat)
+    file(MAKE_DIRECTORY ${BUNGEE_COMPAT_DIR})
+    
+    # Generate unistd.h
+    set(UNISTD_H_PATH ${BUNGEE_COMPAT_DIR}/unistd.h)
+    if(NOT EXISTS ${UNISTD_H_PATH})
+        file(WRITE ${UNISTD_H_PATH} 
+"#ifndef _WINDOWS_UNISTD_H
+#define _WINDOWS_UNISTD_H
+
+#include <io.h>
+#include <process.h>
+#include <stddef.h>  // Added for size_t
+
+#define R_OK 4
+#define W_OK 2
+#define F_OK 0
+
+#define STDIN_FILENO 0
+#define STDOUT_FILENO 1
+#define STDERR_FILENO 2
+
+#define access _access
+#define dup2 _dup2
+#define execve _execve
+#define getcwd _getcwd
+#define chdir _chdir
+#define unlink _unlink
+#define fileno _fileno
+#define isatty _isatty
+
+#ifdef _WIN64
+typedef __int64 ssize_t;
+#else
+typedef long ssize_t;
+#endif
+
+#endif
+")
+    endif()
+    
+    # Add to system include path BEFORE adding subdirectory
+    include_directories(SYSTEM ${BUNGEE_COMPAT_DIR})
+    
+    # Also set environment variable for good measure
+    set(ENV{CPATH} "${BUNGEE_COMPAT_DIR};$ENV{CPATH}")
+endif()
+
+if(MSVC)
+    # Extreme MSVC compatibility mode
+    add_compile_options(/permissive-)
+    add_compile_options(/Zc:__cplusplus)
+    add_compile_options(/Zc:strictStrings)
+    add_compile_options(/Zc:rvalueCast)
+    add_compile_options(/Zc:ternary)
+    
+    # Disable all warnings for Bungee (temporary)
+    add_compile_options(/w)
+    
+    # Set C++17
+    set(CMAKE_CXX_STANDARD 17)
+    set(CMAKE_CXX_STANDARD_REQUIRED ON)
+endif()
+
+# Patch PFFFT for MSVC
+if(MSVC)
+    # Define a macro to fix designated initializers
+    add_compile_definitions(PFFFT_USE_MSVC_COMPAT=1)
+endif()
+
+# Patch Resample.h for MSVC compatibility
+if(MSVC)
+    set(RESAMPLE_H_PATH ${CMAKE_CURRENT_SOURCE_DIR}/external/bungee/src/Resample.h)
+    
+    # Check if already patched (optional)
+    file(READ ${RESAMPLE_H_PATH} RESAMPLE_H_CONTENT)
+    if(NOT RESAMPLE_H_CONTENT MATCHES "BUNGEE_NOINLINE")
+        message(STATUS "Patching Resample.h for MSVC compatibility...")
+        
+        # Replace the __attribute__ line with platform-agnostic version
+        string(REPLACE 
+            "static __attribute__((noinline)) void run"
+            "static \n#ifdef _MSC_VER\n    __declspec(noinline)\n#else\n    __attribute__((noinline))\n#endif\n void run"
+            PATCHED_CONTENT "${RESAMPLE_H_CONTENT}"
+        )
+        
+        # Write back
+        file(WRITE ${RESAMPLE_H_PATH} "${PATCHED_CONTENT}")
+    endif()
+endif()
+
+# NOW add Bungee
+add_subdirectory(external/bungee)
+
+if(MSVC)
+    # Try different possible target names
+    set(BUNGEE_TARGET_NAMES bungee Bungee bungee_library Bungee::bungee)
+    set(BUNGEE_FOUND_TARGET "")
+    foreach(target_name ${BUNGEE_TARGET_NAMES})
+        if(TARGET ${target_name})
+            set(BUNGEE_FOUND_TARGET ${target_name})
+            message(STATUS "Found Bungee target: ${BUNGEE_FOUND_TARGET}")
+            break()
+        endif()
+    endforeach()
+    
+    if(NOT BUNGEE_FOUND_TARGET)
+        message(FATAL_ERROR "Could not find Bungee library target")
+    endif()
+endif()
+
 sc_add_server_plugin(
     "BufPlayBungee/BufPlayBungee" # desination directory
     "BufPlayBungee" # target name
@@ -83,29 +198,20 @@ sc_add_server_plugin(
     "${BufPlayBungee_schelp_files}"
 )
 
-# ===== Link static bungee library (Windows only) =====
-if(WIN32)
-    # Define the paths once
-    set(BUNGEE_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../bungee/include")
-    set(BUNGEE_LIBRARY "${CMAKE_CURRENT_SOURCE_DIR}/../bungee/windows-x86_64/bungee.lib")
 
-    # Helper macro to apply settings to a target if it exists
-    macro(target_link_bungee TARGET_NAME)
-        if(TARGET ${TARGET_NAME})
-            target_include_directories(${TARGET_NAME} PRIVATE ${BUNGEE_INCLUDE_DIR})
-            target_link_libraries(${TARGET_NAME} PRIVATE ${BUNGEE_LIBRARY})
-            message(STATUS "Linked bungee to ${TARGET_NAME}")
-        endif()
-    endmacro()
-
-    # Apply to both possible server targets (scsynth and supernova)
-    target_link_bungee(BufPlayBungee_scsynth)
-    target_link_bungee(BufPlayBungee_supernova)
-
-    # Also try the base name in case the module uses it directly
-    target_link_bungee(BufPlayBungee)
+# Link bungee to both server-specific targets
+if(MSVC)
+    target_link_libraries(BufPlayBungee_scsynth PRIVATE ${BUNGEE_FOUND_TARGET})
+    target_link_libraries(BufPlayBungee_supernova PRIVATE ${BUNGEE_FOUND_TARGET})
+else()
+    target_link_libraries(BufPlayBungee_scsynth PRIVATE bungee)
+    target_link_libraries(BufPlayBungee_supernova PRIVATE bungee)
 endif()
-# ======================================================
+
+# Add include path (same for both)
+target_include_directories(BufPlayBungee_scsynth PRIVATE external/bungee)
+target_include_directories(BufPlayBungee_supernova PRIVATE external/bungee)
+
 
 ####################################################################################################
 # END PLUGIN TARGET DEFINITION

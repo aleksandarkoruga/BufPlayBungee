@@ -2,18 +2,20 @@
 
 Author: Aleksandar Koruga
 
-A BufPlayBungee 
+A SuperCollider UGen for time-stretching and pitch-shifting using the Bungee library.
 
 ### Requirements
 
 - CMake >= 3.5
 - SuperCollider source code
+- Git (for cloning submodules)
 
 ### Building
 
-Clone the project:
+Clone the project with submodules:
 
-    git clone https://github.com/aleksandarkoruga/bufplaybungee
+
+    git clone --recursive https://github.com/aleksandarkoruga/bufplaybungee
     cd bufplaybungee
     mkdir build
     cd build
@@ -29,6 +31,15 @@ SuperCollider extensions directory: add the option `-DCMAKE_INSTALL_PREFIX=/path
 
 It's expected that the SuperCollider repo is cloned at `../supercollider` relative to this repo. If
 it's not: add the option `-DSC_PATH=/path/to/sc/source`.
+
+### Windows Notes
+When building on Windows with MSVC, the build system automatically:
+
+Adds necessary Windows compatibility headers
+
+Patches Bungee's MSVC compatibility issues
+
+Configures the correct compiler flags
 
 ### Developing
 

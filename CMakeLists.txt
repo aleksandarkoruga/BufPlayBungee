@@ -83,8 +83,6 @@ typedef long ssize_t;
     include_directories(SYSTEM ${BUNGEE_COMPAT_DIR})
 endif()
 
-# Assert fix header 
-    set(ASSERT_FIX_H ${CMAKE_BINARY_DIR}/assert_fix.h)
 # Assert fix 
 set(ASSERT_FIX_H ${CMAKE_BINARY_DIR}/assert_fix.h)
 file(WRITE ${ASSERT_FIX_H} 
@@ -98,8 +96,6 @@ file(WRITE ${ASSERT_FIX_H}
 #define BUNGEE_VERSION_MINOR 0
 #define BUNGEE_VERSION_PATCH 0
 ")
-endif()
-
 
 # Patch Resample.h for MSVC (__attribute__ -> __declspec)
 if(MSVC)

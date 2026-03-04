@@ -84,9 +84,10 @@ typedef long ssize_t;
 endif()
 
 # Assert fix header 
-if(MSVC)
     set(ASSERT_FIX_H ${CMAKE_BINARY_DIR}/assert_fix.h)
-    file(WRITE ${ASSERT_FIX_H} 
+# Assert fix 
+set(ASSERT_FIX_H ${CMAKE_BINARY_DIR}/assert_fix.h)
+file(WRITE ${ASSERT_FIX_H} 
 "#pragma once
 #include <cassert>
 #ifndef assert
@@ -100,7 +101,7 @@ if(MSVC)
 endif()
 
 
-# Patch Resample.h for MSVC
+# Patch Resample.h for MSVC (__attribute__ -> __declspec)
 if(MSVC)
     set(RESAMPLE_H_PATH ${CMAKE_CURRENT_SOURCE_DIR}/external/bungee/src/Resample.h)
     file(READ ${RESAMPLE_H_PATH} RESAMPLE_H_CONTENT)
@@ -119,7 +120,7 @@ set(CPP_SOURCES
     plugins/BufPlayBungee/BufPlayBungee.cpp
 )
 
-# Bungee C++ sources
+# Bungee
 file(GLOB_RECURSE BUNGEE_CPP_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/external/bungee/src/*.cpp"
 )
@@ -128,7 +129,7 @@ list(FILTER BUNGEE_CPP_SOURCES EXCLUDE REGEX ".*test.*")
 list(FILTER BUNGEE_CPP_SOURCES EXCLUDE REGEX ".*example.*")
 list(APPEND CPP_SOURCES ${BUNGEE_CPP_SOURCES})
 
-# PFFFT sources (C only)
+# PFFFT
 file(GLOB PFFFT_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/external/bungee/submodules/pffft/*.c"
 )
@@ -140,10 +141,9 @@ target_include_directories(bungee_c_objects PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/external/bungee/submodules/pffft
     ${BUNGEE_COMPAT_DIR}
 )
-# compiled as C
 set_target_properties(bungee_c_objects PROPERTIES LANGUAGE C)
 
-# version.h
+# version.h 
 set(BUNGEE_VERSION_H ${CMAKE_CURRENT_SOURCE_DIR}/external/bungee/src/bungee/version.h)
 if(NOT EXISTS ${BUNGEE_VERSION_H})
     file(WRITE ${BUNGEE_VERSION_H} 
@@ -155,7 +155,7 @@ if(NOT EXISTS ${BUNGEE_VERSION_H})
 ")
 endif()
 
-#  Eigen
+# Eigen
 set(EIGEN_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/bungee/submodules/eigen)
 if(NOT EXISTS ${EIGEN_INCLUDE_DIR})
     message(STATUS "Downloading Eigen...")
@@ -172,7 +172,6 @@ if(NOT EXISTS ${EIGEN_INCLUDE_DIR})
     file(GLOB EIGEN_EXTRACTED_DIR ${CMAKE_CURRENT_BINARY_DIR}/eigen-src/eigen-*)
     set(EIGEN_INCLUDE_DIR ${EIGEN_EXTRACTED_DIR})
 endif()
-
 
 sc_add_server_plugin(
     "BufPlayBungee/BufPlayBungee"
@@ -191,10 +190,9 @@ foreach(PLUGIN_TARGET BufPlayBungee_scsynth BufPlayBungee_supernova)
         ${BUNGEE_COMPAT_DIR}
     )
 
-    # Link the C static library
     target_link_libraries(${PLUGIN_TARGET} PRIVATE bungee_c_objects)
 
-    # For C++ files, force include assert_fix.h
+    # For C++ files, force include assert_fix.h (cross‑platform)
     if(MSVC)
         target_compile_options(${PLUGIN_TARGET} PRIVATE
             $<$<COMPILE_LANGUAGE:CXX>:/FI"${ASSERT_FIX_H}">
@@ -203,6 +201,7 @@ foreach(PLUGIN_TARGET BufPlayBungee_scsynth BufPlayBungee_supernova)
         )
     else()
         target_compile_options(${PLUGIN_TARGET} PRIVATE
+            $<$<COMPILE_LANGUAGE:CXX>:-include ${ASSERT_FIX_H}>
             -ffast-math -fno-finite-math-only -fno-exceptions
         )
     endif()

@@ -1,79 +1,3 @@
-name: Build and Release
-
-# Set global permissions for all jobs
-permissions:
-  contents: write
-  pull-requests: read
-
-on:
-  push:
-    branches: [ "master" ]
-  pull_request:
-    branches: [ "master" ]
-  release:
-    types: [published]
-
-jobs:
-  build:
-    strategy:
-      matrix:
-        os: [windows-latest, macos-latest]
-      fail-fast: false
-    runs-on: ${{ matrix.os }}
-
-    steps:
-    - name: Checkout plugin with submodules
-      uses: actions/checkout@v4
-      with:
-        submodules: recursive
-
-    - name: Checkout SuperCollider source
-      uses: actions/checkout@v4
-      with:
-        repository: supercollider/supercollider
-        path: supercollider
-
-    - name: Configure CMake
-      run: |
-        cmake -B build -DCMAKE_BUILD_TYPE=Release -DSC_PATH="${{ github.workspace }}/supercollider"
-
-    - name: Build
-      run: |
-        cmake --build build --config Release
-
-    - name: List build output (debug)
-      run: |
-        echo "=== Build directory contents ==="
-        ls -R build
-      shell: bash
-
-    - name: Prepare artifact folder
-      run: |
-        mkdir -p artifact
-        # Copy the SC class file
-        cp plugins/BufPlayBungee/BufPlayBungee.sc artifact/
-        # Find and copy .scx files/directories
-        find build -name "BufPlayBungee*.scx" -exec cp -r {} artifact/ \; 2>/dev/null || true
-        # On macOS, zip the .scx bundle so it becomes a single file
-        if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-          cd artifact
-          for item in BufPlayBungee*.scx; do
-            if [ -d "$item" ]; then
-              zip -r "${item}.zip" "$item"
-              rm -rf "$item"
-            fi
-          done
-          cd ..
-        fi
-      shell: bash
-
-    - name: Upload artifact (clean folder)
-      uses: actions/upload-artifact@v4
-      with:
-        name: BufPlayBungee-${{ matrix.os }}
-        path: artifact/*
-        if-no-files-found: error
-
   release:
     needs: build
     runs-on: ubuntu-latest
@@ -85,17 +9,22 @@ jobs:
       with:
         path: artifacts
 
-    - name: Prepare release assets
+    - name: Create OS‑specific zip archives
       run: |
-        mkdir -p release-assets
-        # Flatten all files from all artifact folders into release-assets
-        find artifacts -type f -exec cp {} release-assets/ \;
-        echo "Files ready for release:"
-        ls -la release-assets/
+        cd artifacts
+        for artifact_dir in */; do
+          # Remove trailing slash to get folder name
+          dirname="${artifact_dir%/}"
+          echo "Zipping $dirname ..."
+          zip -r "../${dirname}.zip" "$dirname"
+        done
+        cd ..
+        echo "✅ Created archives:"
+        ls -la *.zip
 
-    - name: Upload release artifacts
+    - name: Upload release archives
       uses: Roang-zero1/github-upload-release-artifacts-action@v2
       with:
-        args: "release-assets/"
+        args: "*.zip"
       env:
-        GITHUB_TOKEN: ${{ github.token }}   # Use github.token instead of secrets.GITHUB_TOKEN
+        GITHUB_TOKEN: ${{ github.token }}

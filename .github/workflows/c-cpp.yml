@@ -73,6 +73,8 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     if: github.event_name == 'release'
+    permissions:
+      contents: write   # Required to upload assets to the release
 
     steps:
     - name: Download all artifacts
@@ -88,12 +90,9 @@ jobs:
         echo "Files ready for release:"
         ls -la release-assets/
 
-    - name: Upload to Release
-      uses: softprops/action-gh-release@v2
+    - name: Upload release artifacts
+      uses: Roang-zero1/github-upload-release-artifacts-action@v2
       with:
-        files: release-assets/*
-        draft: false
-        prerelease: false
-        generate_release_notes: false
+        args: "release-assets/"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

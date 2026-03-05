@@ -93,21 +93,28 @@ jobs:
       with:
         path: artifacts
 
-    - name: Create OS‑specific zip archives
+    - name: Create one zip per OS
       run: |
+        set -e  # stop on first error
         cd artifacts
         for artifact_dir in */; do
+          # Remove trailing slash to get directory name (e.g., BufPlayBungee-windows-latest)
           dirname="${artifact_dir%/}"
-          echo "📦 Zipping $dirname ..."
-          zip -r "../${dirname}.zip" "$dirname"
+          echo "📦 Creating archive for $dirname ..."
+          # Create zip from the contents of the artifact directory (flat)
+          (cd "$dirname" && zip -r "${{ github.workspace }}/${dirname}.zip" .)
+          if [ ! -f "${{ github.workspace }}/${dirname}.zip" ]; then
+            echo "❌ Failed to create $dirname.zip"
+            exit 1
+          fi
         done
         cd ..
-        echo "✅ Created archives:"
-        ls -la *.zip
+        echo "✅ Archives created:"
+        ls -la "${{ github.workspace }}"/*.zip
 
     - name: Upload release archives
       uses: Roang-zero1/github-upload-release-artifacts-action@v2
       with:
-        args: "*.zip"
+        args: "${{ github.workspace }}/*.zip"
       env:
         GITHUB_TOKEN: ${{ github.token }}

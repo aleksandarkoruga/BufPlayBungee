@@ -1,8 +1,10 @@
-name: Build BufPlayBungee
+name: Build and Release
 
 on:
   push:
     branches: [ "master" ]
+    tags:
+      - 'v*'  # Trigger on version tags
   pull_request:
     branches: [ "master" ]
 
@@ -34,18 +36,39 @@ jobs:
       run: |
         cmake --build build --config Release
 
-    - name: List build output (debug)
-      run: |
-        echo "=== Build directory contents ==="
-        ls -R build
-      shell: bash
-
-    - name: Upload plugin artifact
+    - name: Upload artifacts (for all runs)
       uses: actions/upload-artifact@v4
       with:
         name: BufPlayBungee-${{ matrix.os }}
         path: |
-          build/Release/BufPlayBungee*.scx
-          build/BufPlayBungee*.scx
-          build/*/BufPlayBungee*.scx
-        if-no-files-found: error
+          build/**/BufPlayBungee*.scx
+        if-no-files-found: warn
+
+    - name: Prepare release assets
+      if: startsWith(github.ref, 'refs/tags/')
+      run: |
+        mkdir -p release-assets
+        cp $(find build -name "BufPlayBungee*.scx" -type f -o -name "BufPlayBungee*.scx" -type d) release-assets/ 2>/dev/null || true
+        if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+          cd release-assets
+          for d in BufPlayBungee*.scx; do
+            if [ -d "$d" ]; then
+              zip -r "../${d}.zip" "$d"
+              rm -rf "$d"
+            fi
+          done
+          cd ..
+        fi
+      shell: bash
+
+    - name: Release
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: |
+          release-assets/*
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

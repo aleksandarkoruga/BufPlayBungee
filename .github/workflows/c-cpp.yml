@@ -1,3 +1,87 @@
+name: Build and Release
+
+permissions:
+  contents: write
+  pull-requests: read
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+  release:
+    types: [published]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - name: Checkout plugin with submodules
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Checkout SuperCollider source
+      uses: actions/checkout@v4
+      with:
+        repository: supercollider/supercollider
+        path: supercollider
+
+    - name: Configure CMake
+      run: |
+        cmake -B build -DCMAKE_BUILD_TYPE=Release -DSC_PATH="${{ github.workspace }}/supercollider"
+
+    - name: Build
+      run: |
+        cmake --build build --config Release
+
+    - name: List build output (debug)
+      run: |
+        echo "=== Build directory contents ==="
+        ls -R build
+      shell: bash
+
+    - name: Prepare artifact folder
+      run: |
+        mkdir -p artifact
+        # Copy the SC class file
+        cp plugins/BufPlayBungee/BufPlayBungee.sc artifact/
+        # Find and copy .scx files/directories – fail if none found
+        found_scx=$(find build -name "BufPlayBungee*.scx" | head -1)
+        if [ -z "$found_scx" ]; then
+          echo "❌ No .scx files found in build directory!"
+          exit 1
+        fi
+        find build -name "BufPlayBungee*.scx" -exec cp -r {} artifact/ \;
+        # On macOS, zip the .scx bundle so it becomes a single file
+        if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+          cd artifact
+          for item in BufPlayBungee*.scx; do
+            if [ -d "$item" ]; then
+              echo "📦 Zipping $item ..."
+              zip -r "${item}.zip" "$item"
+              rm -rf "$item"
+            fi
+          done
+          cd ..
+        fi
+        # Show what we have in artifact
+        echo "✅ Artifact contents:"
+        ls -la artifact/
+      shell: bash
+
+    - name: Upload artifact (clean folder)
+      uses: actions/upload-artifact@v4
+      with:
+        name: BufPlayBungee-${{ matrix.os }}
+        path: artifact/*
+        if-no-files-found: error
+
   release:
     needs: build
     runs-on: ubuntu-latest
@@ -13,9 +97,8 @@
       run: |
         cd artifacts
         for artifact_dir in */; do
-          # Remove trailing slash to get folder name
           dirname="${artifact_dir%/}"
-          echo "Zipping $dirname ..."
+          echo "📦 Zipping $dirname ..."
           zip -r "../${dirname}.zip" "$dirname"
         done
         cd ..

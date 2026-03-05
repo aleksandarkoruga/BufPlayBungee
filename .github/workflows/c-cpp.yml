@@ -11,7 +11,7 @@ jobs:
     strategy:
       matrix:
         os: [windows-latest, macos-latest]
-      fail-fast: false   # don't cancel other jobs if one fails
+      fail-fast: false
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -24,8 +24,7 @@ jobs:
       uses: actions/checkout@v4
       with:
         repository: supercollider/supercollider
-        path: supercollider   # into workspace/supercollider
-        # ref: Version-3.13.0   # optional pin
+        path: supercollider
 
     - name: Configure CMake
       run: |
@@ -35,12 +34,18 @@ jobs:
       run: |
         cmake --build build --config Release
 
+    - name: List build output (debug)
+      run: |
+        echo "=== Build directory contents ==="
+        ls -R build
+      shell: bash
+
     - name: Upload plugin artifact
       uses: actions/upload-artifact@v4
       with:
         name: BufPlayBungee-${{ matrix.os }}
         path: |
           build/Release/BufPlayBungee*.scx
-          build/Release/*.dylib
-          build/Release/*.so
-        if-no-files-found: warn
+          build/BufPlayBungee*.scx
+          build/*/BufPlayBungee*.scx
+        if-no-files-found: error

@@ -49,35 +49,9 @@ jobs:
         cp plugins/BufPlayBungee/BufPlayBungee.sc artifact/
         # Find and copy .scx files/directories
         find build -name "BufPlayBungee*.scx" -exec cp -r {} artifact/ \; 2>/dev/null || true
-        # On macOS, the .scx is a directory; we'll leave it as is (it will appear as a folder in the artifact zip)
-        # If you prefer a zip, uncomment the next block:
-        # if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-        #   cd artifact
-        #   for item in BufPlayBungee*.scx; do
-        #     if [ -d "$item" ]; then
-        #       zip -r "${item}.zip" "$item"
-        #       rm -rf "$item"
-        #     fi
-        #   done
-        #   cd ..
-        # fi
-      shell: bash
-
-    - name: Upload artifact (clean folder)
-      uses: actions/upload-artifact@v4
-      with:
-        name: BufPlayBungee-${{ matrix.os }}
-        path: artifact/*
-        if-no-files-found: error
-
-    - name: Prepare release assets
-      if: github.event_name == 'release'
-      run: |
-        mkdir -p release-assets
-        cp plugins/BufPlayBungee/BufPlayBungee.sc release-assets/
-        find build -name "BufPlayBungee*.scx" -exec cp -r {} release-assets/ \; 2>/dev/null || true
+        # On macOS, zip the .scx bundle so it becomes a single file
         if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-          cd release-assets
+          cd artifact
           for item in BufPlayBungee*.scx; do
             if [ -d "$item" ]; then
               zip -r "${item}.zip" "$item"
@@ -88,9 +62,34 @@ jobs:
         fi
       shell: bash
 
-    - name: Release
+    - name: Upload artifact (clean folder)
+      uses: actions/upload-artifact@v4
+      with:
+        name: BufPlayBungee-${{ matrix.os }}
+        path: artifact/*
+        if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Prepare release assets
+      run: |
+        mkdir -p release-assets
+        # Flatten all files from all artifact folders into release-assets
+        find artifacts -type f -exec cp {} release-assets/ \;
+        echo "Files ready for release:"
+        ls -la release-assets/
+
+    - name: Upload to Release
       uses: softprops/action-gh-release@v2
-      if: github.event_name == 'release'
       with:
         files: release-assets/*
         draft: false

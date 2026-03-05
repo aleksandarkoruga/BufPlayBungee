@@ -11,6 +11,7 @@ jobs:
     strategy:
       matrix:
         os: [windows-latest, macos-latest]
+      fail-fast: false   # don't cancel other jobs if one fails
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -23,13 +24,12 @@ jobs:
       uses: actions/checkout@v4
       with:
         repository: supercollider/supercollider
-        path: ../supercollider
-        # Optionally pin a specific version/tag:
-        # ref: Version-3.13.0
+        path: supercollider   # into workspace/supercollider
+        # ref: Version-3.13.0   # optional pin
 
     - name: Configure CMake
       run: |
-        cmake -B build -DCMAKE_BUILD_TYPE=Release -DSC_PATH="${{ github.workspace }}/../supercollider"
+        cmake -B build -DCMAKE_BUILD_TYPE=Release -DSC_PATH="${{ github.workspace }}/supercollider"
 
     - name: Build
       run: |

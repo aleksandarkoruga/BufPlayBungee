@@ -4,7 +4,7 @@ on:
   push:
     branches: [ "master" ]
     tags:
-      - 'v*'  # Trigger on version tags
+      - 'v*'               # Trigger on version tags like v1.0.0
   pull_request:
     branches: [ "master" ]
 
@@ -36,25 +36,37 @@ jobs:
       run: |
         cmake --build build --config Release
 
-    - name: Upload artifacts (for all runs)
+    - name: List build output (debug)
+      run: |
+        echo "=== Build directory contents ==="
+        ls -R build
+      shell: bash
+
+    - name: Upload artifacts (workflow storage)
       uses: actions/upload-artifact@v4
       with:
         name: BufPlayBungee-${{ matrix.os }}
         path: |
           build/**/BufPlayBungee*.scx
+          plugins/BufPlayBungee/BufPlayBungee.sc
         if-no-files-found: warn
 
     - name: Prepare release assets
       if: startsWith(github.ref, 'refs/tags/')
       run: |
         mkdir -p release-assets
-        cp $(find build -name "BufPlayBungee*.scx" -type f -o -name "BufPlayBungee*.scx" -type d) release-assets/ 2>/dev/null || true
+        # Copy the SC class file
+        cp plugins/BufPlayBungee/BufPlayBungee.sc release-assets/
+        # Find and copy any .scx files or directories
+        find build -name "BufPlayBungee*.scx" -exec cp -r {} release-assets/ \; 2>/dev/null || true
+        # On macOS, .scx is a directory; zip the whole bundle
         if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
           cd release-assets
-          for d in BufPlayBungee*.scx; do
-            if [ -d "$d" ]; then
-              zip -r "../${d}.zip" "$d"
-              rm -rf "$d"
+          # Create a zip of the macOS bundle (if present)
+          for item in BufPlayBungee*.scx; do
+            if [ -d "$item" ]; then
+              zip -r "${item}.zip" "$item"
+              rm -rf "$item"
             fi
           done
           cd ..
@@ -62,11 +74,10 @@ jobs:
       shell: bash
 
     - name: Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       if: startsWith(github.ref, 'refs/tags/')
       with:
-        files: |
-          release-assets/*
+        files: release-assets/*
         draft: false
         prerelease: false
         generate_release_notes: true

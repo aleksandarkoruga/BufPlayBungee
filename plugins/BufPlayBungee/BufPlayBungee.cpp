@@ -21,8 +21,8 @@ namespace BufPlayBungee {
         auto* unit = this;
        
         const Bungee::SampleRates sampleRates = {
-            static_cast<double>(sampleRate()), // input sample rate
-            static_cast<double>(sampleRate())  // output sample rate
+            static_cast<int>(sampleRate()), // input sample rate
+            static_cast<int>(sampleRate())  // output sample rate
         };
 
         m_stretcher = std::make_unique<Bungee::Stretcher<Bungee::Basic>>(sampleRates, 1);

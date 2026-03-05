@@ -1,5 +1,10 @@
 name: Build and Release
 
+# Set global permissions for all jobs
+permissions:
+  contents: write
+  pull-requests: read
+
 on:
   push:
     branches: [ "master" ]
@@ -73,8 +78,6 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     if: github.event_name == 'release'
-    permissions:
-      contents: write   # Required to upload assets to the release
 
     steps:
     - name: Download all artifacts
@@ -95,4 +98,4 @@ jobs:
       with:
         args: "release-assets/"
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ github.token }}   # Use github.token instead of secrets.GITHUB_TOKEN

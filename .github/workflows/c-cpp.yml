@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [ "master" ]
   release:
-    types: [published]  # This triggers when you publish a release
+    types: [published]
 
 jobs:
   build:
@@ -42,27 +42,42 @@ jobs:
         ls -R build
       shell: bash
 
-    - name: Upload artifacts (workflow storage)
+    - name: Prepare artifact folder
+      run: |
+        mkdir -p artifact
+        # Copy the SC class file
+        cp plugins/BufPlayBungee/BufPlayBungee.sc artifact/
+        # Find and copy .scx files/directories
+        find build -name "BufPlayBungee*.scx" -exec cp -r {} artifact/ \; 2>/dev/null || true
+        # On macOS, the .scx is a directory; we'll leave it as is (it will appear as a folder in the artifact zip)
+        # If you prefer a zip, uncomment the next block:
+        # if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+        #   cd artifact
+        #   for item in BufPlayBungee*.scx; do
+        #     if [ -d "$item" ]; then
+        #       zip -r "${item}.zip" "$item"
+        #       rm -rf "$item"
+        #     fi
+        #   done
+        #   cd ..
+        # fi
+      shell: bash
+
+    - name: Upload artifact (clean folder)
       uses: actions/upload-artifact@v4
       with:
         name: BufPlayBungee-${{ matrix.os }}
-        path: |
-          build/**/BufPlayBungee*.scx
-          plugins/BufPlayBungee/BufPlayBungee.sc
-        if-no-files-found: warn
+        path: artifact/*
+        if-no-files-found: error
 
     - name: Prepare release assets
-      if: github.event_name == 'release'  # Only run on release events
+      if: github.event_name == 'release'
       run: |
         mkdir -p release-assets
-        # Copy the SC class file
         cp plugins/BufPlayBungee/BufPlayBungee.sc release-assets/
-        # Find and copy any .scx files or directories
         find build -name "BufPlayBungee*.scx" -exec cp -r {} release-assets/ \; 2>/dev/null || true
-        # On macOS, .scx is a directory; zip the whole bundle
         if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
           cd release-assets
-          # Create a zip of the macOS bundle (if present)
           for item in BufPlayBungee*.scx; do
             if [ -d "$item" ]; then
               zip -r "${item}.zip" "$item"
@@ -75,7 +90,7 @@ jobs:
 
     - name: Release
       uses: softprops/action-gh-release@v2
-      if: github.event_name == 'release'  # Only run on release events
+      if: github.event_name == 'release'
       with:
         files: release-assets/*
         draft: false

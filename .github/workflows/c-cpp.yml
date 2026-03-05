@@ -3,10 +3,10 @@ name: Build and Release
 on:
   push:
     branches: [ "master" ]
-    tags:
-      - 'v*'               # Trigger on version tags like v1.0.0
   pull_request:
     branches: [ "master" ]
+  release:
+    types: [published]  # This triggers when you publish a release
 
 jobs:
   build:
@@ -52,7 +52,7 @@ jobs:
         if-no-files-found: warn
 
     - name: Prepare release assets
-      if: startsWith(github.ref, 'refs/tags/')
+      if: github.event_name == 'release'  # Only run on release events
       run: |
         mkdir -p release-assets
         # Copy the SC class file
@@ -75,7 +75,7 @@ jobs:
 
     - name: Release
       uses: softprops/action-gh-release@v2
-      if: startsWith(github.ref, 'refs/tags/')
+      if: github.event_name == 'release'  # Only run on release events
       with:
         files: release-assets/*
         draft: false

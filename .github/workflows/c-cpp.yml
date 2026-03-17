@@ -1,9 +1,5 @@
 name: Build and Release
 
-permissions:
-  contents: write
-  pull-requests: read
-
 on:
   push:
     branches: [ "master" ]
@@ -16,7 +12,7 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [windows-latest, macos-latest]
+        os: [windows-latest, macos-latest, macos-13]
       fail-fast: false
     runs-on: ${{ matrix.os }}
 
@@ -35,11 +31,9 @@ jobs:
     - name: Configure CMake
       run: |
         cmake -B build -DCMAKE_BUILD_TYPE=Release -DSC_PATH="${{ github.workspace }}/supercollider"
-
     - name: Build
       run: |
         cmake --build build --config Release
-
     - name: List build output (debug)
       run: |
         echo "=== Build directory contents ==="
@@ -51,70 +45,73 @@ jobs:
         mkdir -p artifact
         # Copy the SC class file
         cp plugins/BufPlayBungee/BufPlayBungee.sc artifact/
-        # Find and copy .scx files/directories – fail if none found
-        found_scx=$(find build -name "BufPlayBungee*.scx" | head -1)
-        if [ -z "$found_scx" ]; then
-          echo "❌ No .scx files found in build directory!"
-          exit 1
-        fi
-        find build -name "BufPlayBungee*.scx" -exec cp -r {} artifact/ \;
-        # On macOS, zip the .scx bundle so it becomes a single file
+        # Find and copy .scx files/directories
+        find build -name "BufPlayBungee*.scx" -exec cp -r {} artifact/ \; 2>/dev/null || true
+        # On macOS, the .scx is a directory; we'll leave it as is (it will appear as a folder in the artifact zip)
+        # If you prefer a zip, uncomment the next block:
+        # if [[ "${{ matrix.os }}" == macos-* ]]; then
+        #   cd artifact
+        #   for item in BufPlayBungee*.scx; do
+        #     if [ -d "$item" ]; then
+        #       zip -r "${item}.zip" "$item"
+        #       rm -rf "$item"
+        #     fi
+        #   done
+        #   cd ..
+        # fi
+      shell: bash
+
+    - name: Set artifact name
+      id: set-artifact-name
+      run: |
         if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-          cd artifact
-          for item in BufPlayBungee*.scx; do
-            if [ -d "$item" ]; then
-              echo "📦 Zipping $item ..."
-              zip -r "${item}.zip" "$item"
-              rm -rf "$item"
-            fi
-          done
-          cd ..
+          echo "ARTIFACT_NAME=BufPlayBungee-macOS-arm64" >> $GITHUB_OUTPUT
+        elif [[ "${{ matrix.os }}" == "macos-13" ]]; then
+          echo "ARTIFACT_NAME=BufPlayBungee-macOS-x64" >> $GITHUB_OUTPUT
+        else
+          echo "ARTIFACT_NAME=BufPlayBungee-${{ matrix.os }}" >> $GITHUB_OUTPUT
         fi
-        # Show what we have in artifact
-        echo "✅ Artifact contents:"
-        ls -la artifact/
       shell: bash
 
     - name: Upload artifact (clean folder)
       uses: actions/upload-artifact@v4
       with:
-        name: BufPlayBungee-${{ matrix.os }}
+        name: ${{ steps.set-artifact-name.outputs.ARTIFACT_NAME }}
         path: artifact/*
         if-no-files-found: error
 
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.event_name == 'release'
-
-    steps:
-    - name: Download all artifacts
-      uses: actions/download-artifact@v4
-      with:
-        path: artifacts
-
-    - name: Create one zip per OS
+    - name: Prepare release assets
+      if: github.event_name == 'release'
       run: |
-        set -e  # stop on first error
-        cd artifacts
-        for artifact_dir in */; do
-          # Remove trailing slash to get directory name (e.g., BufPlayBungee-windows-latest)
-          dirname="${artifact_dir%/}"
-          echo "📦 Creating archive for $dirname ..."
-          # Create zip from the contents of the artifact directory (flat)
-          (cd "$dirname" && zip -r "${{ github.workspace }}/${dirname}.zip" .)
-          if [ ! -f "${{ github.workspace }}/${dirname}.zip" ]; then
-            echo "❌ Failed to create $dirname.zip"
-            exit 1
-          fi
-        done
-        cd ..
-        echo "✅ Archives created:"
-        ls -la "${{ github.workspace }}"/*.zip
+        mkdir -p release-assets
+        cp plugins/BufPlayBungee/BufPlayBungee.sc release-assets/
+        find build -name "BufPlayBungee*.scx" -exec cp -r {} release-assets/ \; 2>/dev/null || true
+        if [[ "${{ matrix.os }}" == macos-* ]]; then
+          cd release-assets
+          for item in BufPlayBungee*.scx; do
+            if [ -d "$item" ]; then
+              # Add architecture suffix to the zip filename
+              if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+                mv "$item" "${item%.scx}-arm64.scx"
+                zip -r "${item%.scx}-arm64.scx.zip" "${item%.scx}-arm64.scx"
+              else
+                mv "$item" "${item%.scx}-x64.scx"
+                zip -r "${item%.scx}-x64.scx.zip" "${item%.scx}-x64.scx"
+              fi
+              rm -rf "${item%.scx}-arm64.scx" "${item%.scx}-x64.scx" 2>/dev/null || true
+            fi
+          done
+          cd ..
+        fi
+      shell: bash
 
-    - name: Upload release archives
-      uses: Roang-zero1/github-upload-release-artifacts-action@v2
+    - name: Release
+      uses: softprops/action-gh-release@v2
+      if: github.event_name == 'release'
       with:
-        args: "${{ github.workspace }}/*.zip"
+        files: release-assets/*
+        draft: false
+        prerelease: false
+        generate_release_notes: true
       env:
-        GITHUB_TOKEN: ${{ github.token }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

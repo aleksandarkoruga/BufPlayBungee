@@ -8,11 +8,14 @@ on:
   release:
     types: [published]
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     strategy:
       matrix:
-        os: [windows-latest, macos-latest, macos-12]
+        os: [windows-latest, macos-latest, macos-15-intel]
       fail-fast: false
     runs-on: ${{ matrix.os }}
 
@@ -47,18 +50,6 @@ jobs:
         cp plugins/BufPlayBungee/BufPlayBungee.sc artifact/
         # Find and copy .scx files/directories
         find build -name "BufPlayBungee*.scx" -exec cp -r {} artifact/ \; 2>/dev/null || true
-        # On macOS, the .scx is a directory; we'll leave it as is (it will appear as a folder in the artifact zip)
-        # If you prefer a zip, uncomment the next block:
-        # if [[ "${{ matrix.os }}" == macos-* ]]; then
-        #   cd artifact
-        #   for item in BufPlayBungee*.scx; do
-        #     if [ -d "$item" ]; then
-        #       zip -r "${item}.zip" "$item"
-        #       rm -rf "$item"
-        #     fi
-        #   done
-        #   cd ..
-        # fi
       shell: bash
 
     - name: Set artifact name
@@ -66,14 +57,14 @@ jobs:
       run: |
         if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
           echo "ARTIFACT_NAME=BufPlayBungee-macOS-arm64" >> $GITHUB_OUTPUT
-        elif [[ "${{ matrix.os }}" == "macos-12" ]]; then
+        elif [[ "${{ matrix.os }}" == "macos-15-intel" ]]; then
           echo "ARTIFACT_NAME=BufPlayBungee-macOS-x64" >> $GITHUB_OUTPUT
         else
           echo "ARTIFACT_NAME=BufPlayBungee-${{ matrix.os }}" >> $GITHUB_OUTPUT
         fi
       shell: bash
 
-    - name: Upload artifact (clean folder)
+    - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: ${{ steps.set-artifact-name.outputs.ARTIFACT_NAME }}
@@ -90,7 +81,7 @@ jobs:
           cd release-assets
           for item in BufPlayBungee*.scx; do
             if [ -d "$item" ]; then
-              # Add architecture suffix to the zip filename
+              # Add architecture suffix to the folder name before zipping
               if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
                 mv "$item" "${item%.scx}-arm64.scx"
                 zip -r "${item%.scx}-arm64.scx.zip" "${item%.scx}-arm64.scx"
